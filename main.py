@@ -8,10 +8,10 @@ from aiogram.fsm.storage.memory import MemoryStorage
 from config import BOT_TOKEN
 from database import init_db
 
-from handlers.report import router as report_router
-from handlers.moderation import router as moderation_router
-from handlers.admin import router as admin_router
-from handlers.profile import router as profile_router
+from report import router as report_router
+from moderation import router as moderation_router
+from admin import router as admin_router
+from profile import router as profile_router
 
 
 async def main():
