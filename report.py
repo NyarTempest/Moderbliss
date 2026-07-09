@@ -1,94 +1,110 @@
-from aiogram import Router, F
-from aiogram.types import Message
-from aiogram import Bot
 import aiosqlite
 
+from aiogram import Router, F, Bot
+from aiogram.filters import Command
+from aiogram.types import (
+    Message,
+    InlineKeyboardMarkup,
+    InlineKeyboardButton
+)
+
 from config import MOD_GROUP_ID
-from keyboards import ticket_kb
 from database import DB
 
 router = Router()
 
 
-@router.message(F.text.lower().startswith("репорт"))
-async def report(message: Message, bot: Bot):
+def report_kb(user_id: int):
+    return InlineKeyboardMarkup(
+        inline_keyboard=[
+            [
+                InlineKeyboardButton(
+                    text="👮 Рассмотреть",
+                    callback_data=f"review:{user_id}"
+                )
+            ]
+        ]
+    )
+
+
+@router.message(
+    Command("report") |
+    F.text.lower().startswith("репорт")
+)
+async def report(
+    message: Message,
+    bot: Bot
+):
     if not message.reply_to_message:
         return await message.answer(
-            "❌ Используйте репорт ответом на сообщение."
+            "❌ Ответьте на сообщение нарушителя."
         )
 
-    offender = message.reply_to_message.from_user
-    reporter = message.from_user
+    reported = message.reply_to_message.from_user
 
-    reason = message.text[6:].strip()
+    reason = (
+        message.text
+        .replace("/report", "")
+        .replace("репорт", "")
+        .strip()
+    )
 
     if not reason:
-        reason = "Без причины"
+        reason = "Причина не указана"
 
     try:
         topic = await bot.create_forum_topic(
             chat_id=MOD_GROUP_ID,
-            name=reason[:128]
+            name=f"Репорт | {reported.id}"
         )
-    except:
+    except Exception as e:
         return await message.answer(
-            "❌ Не удалось создать тему."
+            f"❌ Ошибка создания тикета:\n{e}"
         )
 
     topic_id = topic.message_thread_id
 
-    if message.chat.username:
-        link = (
-            f"https://t.me/"
-            f"{message.chat.username}/"
-            f"{message.reply_to_message.message_id}"
+    async with aiosqlite.connect(DB) as db:
+        await db.execute(
+            """
+            INSERT INTO tickets
+            (
+                user_id,
+                chat_id,
+                topic_id
+            )
+            VALUES (?, ?, ?)
+            """,
+            (
+                reported.id,
+                message.chat.id,
+                topic_id
+            )
         )
-    else:
-        link = "Ссылка недоступна"
+        await db.commit()
 
     text = f"""
-╭─ 🚨 Новый репорт
-├ 👤 Репортёр:
-│  {reporter.mention_html()}
-├ 🎯 Нарушитель:
-│  {offender.mention_html()}
-├ 🆔 ID:
-│  <code>{offender.id}</code>
-├ 📌 Причина:
-│  {reason}
-├ 🔗 Ссылка:
-│  {link}
-╰ Ожидает проверки.
+╭━━ 📂 НОВЫЙ РЕПОРТ ━━╮
+┣ 👤 Пользователь:
+┃ {reported.full_name}
+┣ 🆔 ID:
+┃ <code>{reported.id}</code>
+┣ 📝 Причина:
+┃ {reason}
+┣ 💬 Чат:
+┃ <code>{message.chat.id}</code>
+╰━━━━━━━━━━━━━━╯
 """
 
     await bot.send_message(
         chat_id=MOD_GROUP_ID,
         message_thread_id=topic_id,
         text=text,
-        reply_markup=ticket_kb(
-            offender.id,
-            topic_id
+        reply_markup=report_kb(
+            reported.id
         )
     )
 
-    async with aiosqlite.connect(DB) as db:
-        await db.execute(
-            """
-            INSERT INTO tickets
-            VALUES (?, ?, ?, ?, ?, ?)
-            """,
-            (
-                topic_id,
-                offender.id,
-                reporter.id,
-                reason,
-                message.chat.id,
-                message.reply_to_message.message_id
-            )
-        )
-
-        await db.commit()
-
-    await message.reply(
-        "✅ Репорт отправлен модераторам."
+    await message.answer(
+        "✅ Репорт отправлен модерации."
     )
