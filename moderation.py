@@ -278,7 +278,7 @@ async def confirm_mute(
 
     chat_id = row[0]
 
-        try:
+    try:
         await bot.restrict_chat_member(
             chat_id=chat_id,
             user_id=user_id,
