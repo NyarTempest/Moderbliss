@@ -278,7 +278,7 @@ async def confirm_mute(
 
     chat_id = row[0]
 
-    try:
+        try:
         await bot.restrict_chat_member(
             chat_id=chat_id,
             user_id=user_id,
@@ -317,7 +317,7 @@ async def confirm_mute(
         await db.commit()
 
     await call.message.answer(
-    f"""
+        f"""
 ╭━━━ 🔇 МУТ ВЫДАН ━━━╮
 ┣ 👤 Пользователь:
 ┃ <code>{user_id}</code>
@@ -327,19 +327,20 @@ async def confirm_mute(
 ┃ {reason}
 ╰━━━━━━━━━━━━━━━╯
 """
-)
-
-try:
-    await bot.delete_forum_topic(
-        chat_id=MOD_GROUP_ID,
-        message_thread_id=call.message.message_thread_id
     )
-except:
-    pass
 
-await state.clear()
-await call.answer()
-    
+    try:
+        await bot.delete_forum_topic(
+            chat_id=MOD_GROUP_ID,
+            message_thread_id=call.message.message_thread_id
+        )
+    except:
+        pass
+
+    await state.clear()
+    await call.answer()
+
+
 @router.callback_query(F.data.startswith("warn:"))
 async def warn(
     call: CallbackQuery,
@@ -421,24 +422,25 @@ async def warn(
 ╰━━━━━━━━━━━━━━╯
 """
 
-if count >= 3:
-    text += "\nℹ️ У пользователя уже много предупреждений."
+    if count >= 3:
+        text += "\n⚠️ Достигнуто 3 варна."
 
-if count >= 5:
-    text += "\nℹ️ Рекомендуется проверить историю нарушений."
+    if count >= 5:
+        text += "\n⛔ Достигнуто 5 варнов."
 
-await call.message.answer(text)
+    await call.message.answer(text)
 
-try:
-    await bot.delete_forum_topic(
-        chat_id=MOD_GROUP_ID,
-        message_thread_id=call.message.message_thread_id
-    )
-except:
-    pass
+    try:
+        await bot.delete_forum_topic(
+            chat_id=MOD_GROUP_ID,
+            message_thread_id=call.message.message_thread_id
+        )
+    except:
+        pass
 
-await call.answer()
-    
+    await call.answer()
+
+
 @router.callback_query(F.data.startswith("ban:"))
 async def ban(
     call: CallbackQuery,
@@ -503,7 +505,7 @@ async def ban(
         await db.commit()
 
     await call.message.answer(
-    f"""
+        f"""
 ╭━━ ⛔ БАН ВЫДАН ━━╮
 ┣ 👤 Пользователь:
 ┃ <code>{user_id}</code>
@@ -511,14 +513,60 @@ async def ban(
 ┃ <code>{call.from_user.id}</code>
 ╰━━━━━━━━━━━━━━╯
 """
-)
-
-try:
-    await bot.delete_forum_topic(
-        chat_id=MOD_GROUP_ID,
-        message_thread_id=call.message.message_thread_id
     )
-except:
-    pass
 
-await call.answer()
+    try:
+        await bot.delete_forum_topic(
+            chat_id=MOD_GROUP_ID,
+            message_thread_id=call.message.message_thread_id
+        )
+    except:
+        pass
+
+    await call.answer()
+
+
+@router.message(F.text.startswith("/history"))
+async def history(
+    message: Message
+):
+    if not message.reply_to_message:
+        return await message.answer(
+            "Ответьте на сообщение пользователя."
+        )
+
+    user_id = message.reply_to_message.from_user.id
+
+    async with aiosqlite.connect(DB) as db:
+        cur = await db.execute(
+            """
+            SELECT action, reason, duration
+            FROM punishments
+            WHERE user_id=?
+            """,
+            (user_id,)
+        )
+
+        rows = await cur.fetchall()
+
+    if not rows:
+        return await message.answer(
+            "История наказаний пуста."
+        )
+
+    text = f"""
+╭━━ 📋 ИСТОРИЯ ━━╮
+┣ 👤 ID:
+┃ <code>{user_id}</code>
+"""
+
+    for action, reason, duration in rows:
+        text += (
+            f"\n┣ {action.upper()}"
+            f"\n┃ Причина: {reason}"
+            f"\n┃ Срок: {duration}"
+        )
+
+    text += "\n╰━━━━━━━━━━━━━━╯"
+
+    await message.answer(text)
